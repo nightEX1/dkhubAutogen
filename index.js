@@ -11,9 +11,7 @@ const days = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13
 const years = ['2003', '2002', '2001', '2000', '1999', '1998', '1997', '1996'];
 
 function delay(time) {
-    return new Promise(function (resolve) {
-        setTimeout(resolve, time);
-    });
+    return new Promise(resolve => setTimeout(resolve, time));
 }
 
 function random_item(items) {
@@ -23,18 +21,18 @@ function random_item(items) {
 function writedingAccount(username, password, cookie) {
     fs.writeFileSync("data/cookies.txt", `${cookie}\r\n`, { flag: 'a' });
     fs.writeFileSync("data/user-pass.txt", `${username}:${password}\r\n`, { flag: 'a' });
-    console.log("The file was saved!");
+    console.log("✅ บันทึกไฟล์เรียบร้อย!");
 }
 
 async function runPuppeteer(roundNumber, usernameInput) {
-    console.log(`Starting round ${roundNumber}`);
-
-    const browser = await puppeteer.launch({ headless: false });
-
+    console.log(`🚀 เริ่มรอบที่ ${roundNumber}`);
+    
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
+    await page.goto('https://www.roblox.com/th/CreateAccount', { waitUntil: "load", timeout: 60000 });
+    await page.setViewport({ width: 1920, height: 1080 });
 
-    await page.goto('https://www.roblox.com/', { waitUntil: "load" });
-
+    // เลือกวันเกิด
     await page.select('#MonthDropdown', random_item(months));
     await page.select('#DayDropdown', random_item(days));
     await page.select('#YearDropdown', random_item(years));
@@ -45,72 +43,81 @@ async function runPuppeteer(roundNumber, usernameInput) {
     await page.type('#signup-username', genUsername);
     await page.type('#signup-password', genpassword);
 
-    await delay(2000);
-
-    const inputValidation = await page.$('#signup-usernameInputValidation');
-    const alert = await (await inputValidation.getProperty('textContent')).jsonValue();
-
-    if (alert.includes("This username is already in use.") || alert.includes("Username not appropriate") || alert.includes("Usernames may only contain")) {
-        genUsername = usernameInput + generator.generate({ length: 5, numbers: true });
-        await page.type('#signup-username', genUsername);
+    // ✅ แก้ไขส่วนตรวจสอบ username (ใช้ selector ตามที่ console.log แสดง)
+    const validationElement = await page.$('#signup-usernameInputValidation');
+    if (validationElement) {
+        const alert = await (await validationElement.getProperty('textContent')).jsonValue();
+        if (alert.includes("ชื่อผู้ใช้ถูกใช้งานไปแล้ว") || 
+            alert.includes("ชื่อผู้ใช้ไม่ถูกต้อง") || 
+            alert.includes("ชื่อผู้ใช้สามารถประกอบด้วยตัวอักษร") || 
+            alert.includes("This username is already in use") || 
+            alert.includes("Username not appropriate")) {
+            
+            genUsername = usernameInput + generator.generate({ length: 5, numbers: true });
+            await page.type('#signup-username', genUsername);
+        }
     }
 
-    await page.click('#MaleButton').catch((err) => console.log('Clicktype Err'.red, err));
+    await delay(1500);
+    await page.click('#MaleButton').catch(() => console.log('⚠️ Click MaleButton error'));
     await delay(1000);
-
     await page.click('#signup-button');
 
-    await page.waitForSelector('.game-home-page-container', { timeout: 500000 }).then(async () => {
+    try {
+        await page.waitForSelector('.game-home-page-container', { timeout: 450000 });
+        
         const getCookie = await page.cookies();
-        const cookie = getCookie.find((cookies) => {
-            return cookies.name === ".ROBLOSECURITY";
-        });
-        writedingAccount(genUsername, genpassword, cookie.value);
-        console.log(`Round ${roundNumber} completed successfully`);
-    });
+        const cookie = getCookie.find(c => c.name === ".ROBLOSECURITY");
+        
+        if (cookie) {
+            writedingAccount(genUsername, genpassword, cookie.value);
+            console.log(`🎉 รอบที่ ${roundNumber} สำเร็จ!`);
+        } else {
+            console.log(`❌ ไม่พบ cookie ในรอบ ${roundNumber}`);
+        }
+    } catch (err) {
+        console.error(`❌ รอบ ${roundNumber} error:`, err.message);
+    }
 
     await browser.close();
+    console.log(`🏁 จบรอบที่ ${roundNumber}`);
 }
 
 if (cluster.isMaster) {
     console.clear();
-
     console.log(gradient('white', 'gray').multiline([
         "DevBy: ZEMONNUB \n",
-        "/> Roblox Account Generate v.2 </ \n",
+        "/> Roblox Account Generator v.2 </ \n",
         "GitHub: https://github.com/Teemo4621 \n"
     ].join('\n')));
-    console.log(gradient.cristal('DiscordMe ∨ \n'));
-    let logo = gradient('orange', 'yellow').multiline([
+    console.log(gradient.cristal('Discord: ZEMONNUB'));
+
+    const logo = gradient('orange', 'yellow').multiline([
         "███████╗███████╗███╗░░░███╗░█████╗░███╗░░██╗",
         "╚════██║██╔════╝████╗░████║██╔══██╗████╗░██║",
         "░░███╔═╝█████╗░░██╔████╔██║██║░░██║██╔██╗██║",
         "██╔══╝░░██╔══╝░░██║╚██╔╝██║██║░░██║██║╚████║",
         "███████╗███████╗██║░╚═╝░██║╚█████╔╝██║░╚███║",
-        "╚══════╝╚══════╝╚═╝░░░░░╚═╝░╚════╝░╚═╝░░╚══╝",
-    ].join('\n'))
+        "╚══════╝╚══════╝╚═╝░░░░░╚═╝░╚════╝░╚═╝░░╚══╝"
+    ].join('\n'));
     console.log(logo + '\n');
 
-    const loop = readlineSync.questionInt("Rounds : ");
-    const usernameInput = readlineSync.question("Prefix username (e.g., Zemon_): ");
+    const loop = readlineSync.questionInt("จำนวนรอบ (Rounds) : ");
+    const usernamePrefix = readlineSync.question("Prefix username (เช่น Zemon_) : ");
 
     for (let i = 0; i < loop; i++) {
-        cluster.fork({ roundNumber: i + 1, usernameInput });
+        cluster.fork({ roundNumber: i + 1, usernameInput: usernamePrefix });
     }
 
-    cluster.on('exit', (worker, code, signal) => {
-        console.log(`Worker ${worker.process.pid} finished with code ${code}`);
+    cluster.on('exit', (worker, code) => {
+        console.log(`Worker ${worker.process.pid} จบ (Code: ${code})`);
     });
 
 } else {
     const roundNumber = parseInt(process.env.roundNumber);
     const usernameInput = process.env.usernameInput;
-
+    
     runPuppeteer(roundNumber, usernameInput)
-        .catch((err) => {
-            console.error(`Error in worker ${process.pid} during round ${roundNumber}:`, err);
-        })
-        .finally(() => {
-            process.exit(0);
-        });
+        .catch(err => console.error(`Error worker ${process.pid}:`, err))
+        .finally(() => process.exit(0));
 }
